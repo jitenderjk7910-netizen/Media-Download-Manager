@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Media Download Manager</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f4f7fa;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .login-card {
+      background: white;
+      padding: 40px;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+      width: 100%;
+      max-width: 400px;
+      box-sizing: border-box;
+      border: 1px solid #e2e8f0;
+    }
+    h2 {
+      margin: 0 0 10px 0;
+      color: #0f172a;
+      font-size: 24px;
+    }
+    .subtitle {
+      color: #64748b;
+      font-size: 14px;
+      margin-bottom: 30px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      color: #334155;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .form-group .label-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .form-group .label-row a {
+      color: #0ea5e9;
+      font-size: 13px;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      box-sizing: border-box;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .form-group input:focus {
+      border-color: #0ea5e9;
+    }
+    .btn-submit {
+      width: 100%;
+      padding: 12px;
+      background-color: #0c8c9e;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: background-color 0.2s;
+    }
+    .btn-submit:hover {
+      background-color: #0a7382;
+    }
+    .btn-submit:disabled {
+      background-color: #94a3b8;
+      cursor: not-allowed;
+    }
+    .footer-text {
+      text-align: center;
+      margin-top: 25px;
+      font-size: 14px;
+      color: #64748b;
+    }
+    .footer-text a {
+      color: #0c8c9e;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    #errorMessage {
+      color: #ef4444;
+      font-size: 13px;
+      margin-bottom: 15px;
+      display: none;
+      background: #fef2f2;
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid #fecaca;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <div class="login-card">
+    <h2>Welcome Back</h2>
+    <div class="subtitle">Sign in to access Media Download Manager.</div>
+
+    <div id="errorMessage"></div>
+
+    <form id="loginForm">
+      <div class="form-group">
+        <label for="email">Email Address</label>
+        <input type="email" id="email" required placeholder="you@example.com">
+      </div>
+      
+      <div class="form-group">
+        <div class="label-row">
+          <label for="password">Password</label>
+          <a href="#">Forgot Password?</a>
+        </div>
+        <input type="password" id="password" required placeholder="••••••••">
+      </div>
+
+      <button type="submit" class="btn-submit" id="submitBtn">Sign In</button>
+    </form>
+
+    <div class="footer-text">
+      Don't have an account? <a href="#" id="signupLink">Sign Up</a>
+    </div>
+  </div>
+
+  <script>
+    // REPLACE THESE WITH YOUR ACTUAL SUPABASE URL AND ANON KEY
+    const SUPABASE_URL = 'https://wzjcikgxhyiotblzourw.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_cGOBeNI0l_fuapJR90nmLA_mm2SUsvT';
+
+    let supabaseClient;
+    try {
+      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    } catch (e) {
+      console.warn("Supabase not configured properly yet.", e);
+    }
+
+    const form = document.getElementById('loginForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const errorMsg = document.getElementById('errorMessage');
+    const signupLink = document.getElementById('signupLink');
+
+    // Check if already logged in
+    async function checkSession() {
+      if (!supabaseClient) return;
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (session) {
+        document.cookie = `sb-access-token=${session.access_token}; path=/; max-age=3600`;
+        window.location.href = '/';
+      }
+    }
+    checkSession();
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!supabaseClient) {
+        showError("Supabase is not configured. Please add URL and Key in login.html.");
+        return;
+      }
+      
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Signing In...';
+      errorMsg.style.display = 'none';
+
+      const { data, error } = await supabaseClient.auth.signInWithPassword({
+        email: email,
+        password: password,
+      });
+
+      if (error) {
+        showError(error.message);
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Sign In';
+      } else {
+        document.cookie = `sb-access-token=${data.session.access_token}; path=/; max-age=3600`;
+        window.location.href = '/';
+      }
+    });
+
+    signupLink.addEventListener('click', async (e) => {
+      e.preventDefault();
+      if (!supabaseClient) return;
+      
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      
+      if (!email || !password) {
+        showError("Please enter an email and password to sign up.");
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Signing Up...';
+      errorMsg.style.display = 'none';
+
+      const { data, error } = await supabaseClient.auth.signUp({
+        email: email,
+        password: password,
+      });
+
+      if (error) {
+        showError(error.message);
+      } else {
+        showError("Sign up successful! Please check your email to verify (or try logging in).", true);
+      }
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Sign In';
+    });
+
+    function showError(msg, isSuccess=false) {
+      errorMsg.textContent = msg;
+      errorMsg.style.display = 'block';
+      errorMsg.style.backgroundColor = isSuccess ? '#ecfdf5' : '#fef2f2';
+      errorMsg.style.color = isSuccess ? '#10b981' : '#ef4444';
+      errorMsg.style.borderColor = isSuccess ? '#a7f3d0' : '#fecaca';
+    }
+  </script>
+</body>
+</html>

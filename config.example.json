@@ -1,0 +1,13 @@
+{
+  "_comment": "Optional user overrides. Edit values and restart the app. Any key omitted here falls back to defaults in app_config.py. You can rename this to config.json to make it active.",
+  "host": "127.0.0.1",
+  "port": 8080,
+  "workers": 50,
+  "timeout": 60,
+  "proxy": {
+    "http": "",
+    "https": ""
+  },
+  "speed_limit_kbps": 0,
+  "enable_notifications": true
+}

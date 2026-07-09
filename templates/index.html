@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Media Download Manager</title>
+  <!-- Load Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+/* ── Reset & base (Compact & Slate/Emerald) ── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: #0f172a; /* Slate 900 */
+  color: #f8fafc;
+  height: 100vh;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+::-webkit-scrollbar { width:4px; height:4px; }
+::-webkit-scrollbar-thumb { background:rgba(148, 163, 184, 0.2); border-radius:4px; }
+::-webkit-scrollbar-thumb:hover { background:rgba(148, 163, 184, 0.4); }
+::-webkit-scrollbar-track { background: transparent; }
+
+.app {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 40px 1fr;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Header ── */
+.app-header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  background: #1e293b; /* Slate 800 */
+  border-bottom: 1px solid #334155; /* Slate 700 */
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.logo-icon {
+  width: 24px; height: 24px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #10b981, #059669); /* Emerald */
+  display: grid; place-items: center;
+  color: #fff; font-weight: 800; font-size: 12px;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+.app-title { font-size: 14px; font-weight: 600; color: #f8fafc; }
+.app-sub { font-size: 11px; color: #94a3b8; margin-left: 6px; }
+.header-spacer { flex:1; }
+.header-status {
+  font-size: 11px; color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 4px 10px; border-radius: 6px;
+  display: flex; align-items: center; gap: 6px;
+  border: 1px solid #334155;
+}
+.dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+.dot.green { background:#10b981; }
+.dot.amber { background:#f59e0b; }
+.dot.red { background:#ef4444; }
+.dot.gray { background:#64748b; }
+
+/* ── Main content ── */
+.main {
+  grid-row: 2;
+  padding: 10px;
+  overflow-y: auto;
+}
+
+.top-grid, .bottom-grid { display: grid; gap: 10px; }
+.top-grid { grid-template-columns: minmax(380px, 1fr) minmax(480px, 1.2fr); }
+.bottom-grid { grid-template-columns: minmax(380px, 1fr) minmax(480px, 1.2fr); }
+
+/* ── Cards ── */
+.card {
+  background: #1e293b;
+  border-radius: 6px;
+  border: 1px solid #334155;
+  padding: 10px;
+  margin-bottom: 10px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.card-header .header-icon { color: #10b981; width: 14px; height: 14px; }
+.card-header h3 { font-size: 13px; font-weight: 600; color: #f8fafc; }
+.card-header .chip {
+  font-size: 10px; padding: 2px 8px; border-radius: 12px;
+  background: rgba(16, 185, 129, 0.15); color: #10b981; margin-left: auto;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+/* ── Tabs ── */
+.tabs {
+  display: inline-flex; gap: 2px; padding: 2px;
+  border-radius: 6px; border: 1px solid #334155; margin-bottom: 10px; background: #0f172a;
+}
+.tab {
+  border: none; background: transparent; padding: 4px 12px; border-radius: 4px;
+  font-size: 11px; font-weight: 500; color: #94a3b8;
+  cursor: pointer; transition: all 0.15s;
+}
+.tab:hover { color: #f8fafc; }
+.tab.active { background: #334155; color: #f8fafc; border: 1px solid #475569; }
+
+/* ── Form elements ── */
+label { display: block; font-size: 11px; font-weight: 500; color: #94a3b8; margin-bottom: 4px; }
+input, textarea, select {
+  width: 100%; border: 1px solid #475569; border-radius: 4px;
+  padding: 6px 10px; font-size: 12px; background: #0f172a;
+  color: #f8fafc; outline: none; transition: border-color 0.15s;
+  min-height: 28px;
+}
+select option { background: #0f172a; color: #f8fafc; }
+input:focus, textarea:focus, select:focus { border-color: #10b981; box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25); }
+textarea { min-height: 50px; font-family: "Consolas", monospace; font-size: 11px; padding: 6px; }
+.row { display: flex; align-items: center; gap: 8px; }
+.row input { flex: 1; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* ── Buttons ── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 4px; padding: 4px 12px;
+  font-size: 12px; font-weight: 500; cursor: pointer; transition: 0.15s;
+  min-height: 28px; background: #334155; color: #f8fafc;
+}
+.btn:hover:not(:disabled) { background: #475569; border-color: #64748b; }
+.btn:active:not(:disabled) { background: #1e293b; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn i { width: 14px; height: 14px; }
+
+.btn-primary { background: linear-gradient(135deg, #10b981, #059669); color: #fff; border: none; box-shadow: inset 0 1px 0 rgba(255,255,255,0.2); }
+.btn-primary:hover:not(:disabled) { background: linear-gradient(135deg, #059669, #047857); border: none; box-shadow: inset 0 1px 0 rgba(255,255,255,0.2); }
+.btn-success { background: linear-gradient(135deg, #10b981, #059669); color: #fff; border: none; box-shadow: inset 0 1px 0 rgba(255,255,255,0.2); }
+.btn-success:hover:not(:disabled) { background: linear-gradient(135deg, #059669, #047857); border: none; }
+.btn-danger { background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; border: none; box-shadow: inset 0 1px 0 rgba(255,255,255,0.2); }
+.btn-danger:hover:not(:disabled) { background: linear-gradient(135deg, #dc2626, #b91c1c); border: none; }
+.btn-warning { background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; border: none; box-shadow: inset 0 1px 0 rgba(255,255,255,0.2); }
+.btn-warning:hover:not(:disabled) { background: linear-gradient(135deg, #d97706, #b45309); border: none; }
+.btn-outline { background: transparent; border: 1px solid #475569; }
+.btn-outline:hover:not(:disabled) { background: rgba(255, 255, 255, 0.05); }
+.btn-sm { padding: 2px 8px; font-size: 11px; min-height: 24px; }
+.btn-group { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+
+/* ── Stats ── */
+.stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.stat-box {
+  background: #334155; border: 1px solid #475569;
+  border-radius: 4px; padding: 6px; text-align: center;
+}
+.stat-box .num { font-size: 16px; font-weight: 600; color: #f8fafc; margin-bottom: 2px; }
+.stat-box .label { font-size: 10px; color: #94a3b8; }
+.stat-box.accent .num { color: #10b981; }
+.stat-box.success .num { color: #34d399; }
+.stat-box.danger .num { color: #f87171; }
+.stat-box.warning .num { color: #fbbf24; }
+
+/* ── Progress bar ── */
+.progress-wrap { margin-top: 10px; background: #0f172a; border-radius: 4px; height: 6px; overflow: hidden; border: 1px solid #334155; }
+.progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #10b981, #059669); transition: width 0.3s ease; }
+
+/* ── Chips ── */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.chip {
+  background: rgba(255,255,255,0.05); border: 1px solid #475569;
+  border-radius: 4px; padding: 2px 8px; font-size: 10px; font-weight: 500; color: #cbd5e1;
+}
+
+/* ── Table ── */
+.table-wrap {
+  border: 1px solid #334155; border-radius: 6px; overflow: auto;
+  max-height: calc(100vh - 280px); background: #0f172a;
+}
+table { width: 100%; border-collapse: collapse; font-size: 11px; }
+th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #1e293b; vertical-align: middle; }
+th {
+  position: sticky; top: 0; background: #0f172a;
+  font-weight: 600; color: #94a3b8; font-size: 10px;
+  text-transform: uppercase; border-bottom: 1px solid #334155; z-index: 2;
+}
+tr:hover { background: #1e293b; }
+.badge-status {
+  display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 500;
+  border: 1px solid transparent;
+}
+.badge-status.ok, .badge-status.direct, .badge-status.reachable { color: #10b981; border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.1); }
+.badge-status.failed { color: #ef4444; border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1); }
+.badge-status.skipped, .badge-status.viewer, .badge-status.page, .badge-status.needs_gdown, .badge-status.html_page, .badge-status.no_images, .badge-status.no_files { color: #f59e0b; border-color: rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.1); }
+.badge-status.login_required { color: #ec4899; border-color: rgba(236, 72, 153, 0.4); background: rgba(236, 72, 153, 0.1); }
+.badge-status.timeout, .badge-status.network, .badge-status.not_found, .badge-status.rate_limited, .badge-status.server_error { color: #ef4444; border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1); }
+
+.thumb { width: 32px; height: 32px; object-fit: cover; border-radius: 4px; border: 1px solid #475569; }
+.thumb-empty { width: 32px; height: 32px; border-radius: 4px; border: 1px dashed #475569; display: grid; place-items: center; color: #64748b; }
+
+/* ── Filters ── */
+.filter-row { display: grid; grid-template-columns: 140px 1fr; gap: 10px; margin-bottom: 10px; }
+
+/* ── Logs ── */
+.log-box {
+  background: #0f172a; border-radius: 4px; padding: 8px; max-height: 80px;
+  overflow: auto; font-family: "Consolas", monospace; font-size: 11px; color: #94a3b8;
+  white-space: pre-wrap; word-break: break-all; border: 1px solid #334155;
+}
+.status-line { font-size: 11px; color: #94a3b8; margin-top: 8px; }
+.status-line strong { color: #f8fafc; }
+.hidden { display: none !important; }
+
+/* ── Checkboxes ── */
+.checkbox-wrap { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #cbd5e1; cursor: pointer; }
+.checkbox-wrap input[type="checkbox"] { width: 14px; height: 14px; accent-color: #10b981; cursor: pointer; }
+
+/* ── Advanced ── */
+.advanced-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 11px; font-weight: 500; color: #10b981; padding: 6px 0; margin-top: 10px; }
+.advanced-toggle:hover { text-decoration: underline; }
+.advanced-toggle i { width: 14px; height: 14px; transition: 0.2s; }
+.advanced-toggle.open i { transform: rotate(90deg); }
+.advanced-body { margin-top: 10px; }
+
+/* ── Modal ── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.8); display: none; place-items: center; z-index: 100; }
+.modal-overlay.open { display: grid; }
+.modal { background: #1e293b; border: 1px solid #475569; border-radius: 6px; padding: 16px; width: 90%; max-width: 400px; box-shadow: 0 8px 30px rgba(0,0,0,0.4); }
+.modal h3 { font-size: 14px; margin-bottom: 10px; color: #f8fafc; }
+.modal p { color:#94a3b8; font-size:11px; margin-bottom:12px; }
+.modal input { margin-bottom: 12px; }
+.modal-message { color:#94a3b8; font-size:11px; margin-bottom:12px; }
+
+.advanced-panel { margin-top: 10px; border: 1px solid #334155; border-radius: 4px; background: #0f172a; padding: 10px; }
+.advanced-panel .advanced-toggle { padding: 0; margin: 0; }
+.advanced-panel .advanced-body { margin-top: 8px; padding-top: 8px; border-top: 1px solid #334155; }
+.advanced-panel .two-col { gap: 8px; }
+.advanced-panel label { font-size: 10px; margin-bottom: 4px; }
+.advanced-panel input, .advanced-panel select { padding: 4px 8px; min-height: 24px; font-size: 11px; }
+.advanced-panel .btn-group { gap: 6px; margin-top: 8px; }
+
+  </style>
+  <link rel="icon" href="data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22grad%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%3Cstop%20offset%3D%220%25%22%20style%3D%22stop-color%3A%233b82f6%3Bstop-opacity%3A1%22%20%2F%3E%3Cstop%20offset%3D%22100%25%22%20style%3D%22stop-color%3A%2310b981%3Bstop-opacity%3A1%22%20%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2216%22%20fill%3D%22url%28%23grad%29%22%20%2F%3E%3Csvg%20x%3D%2214%22%20y%3D%2214%22%20width%3D%2236%22%20height%3D%2236%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%2014.899A7%207%200%201%201%2015.71%208h1.79a4.5%204.5%200%200%201%202.5%208.242%22%2F%3E%3Cpath%20d%3D%22M12%2012v9%22%2F%3E%3Cpath%20d%3D%22m8%2017%204%204%204-4%22%2F%3E%3C%2Fsvg%3E%3C%2Fsvg%3E" type="image/svg+xml">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER -->
+  <header class="app-header">
+    <div class="logo-icon"><i data-lucide="download-cloud" style="width: 20px; height: 20px;"></i></div>
+    <span class="app-title">Media Download Manager</span>
+    <span class="app-sub">v2.0 Premium</span>
+    
+      <div class="header-spacer"></div>
+      <button class="btn btn-sm" onclick="logout()" style="background: transparent; border: 1px solid #334155; color: #94a3b8;"><i data-lucide="log-out"></i> Logout</button>
+
+    <div class="header-status">
+      <span class="dot gray" id="headerDot"></span>
+      <span id="headerStatusText">Ready</span>
+    </div>
+  </header>
+
+  <!-- SIDEBAR REMOVED -->
+
+  <!-- MAIN CONTENT -->
+  <main class="main">
+
+    <!-- Source + Controls row -->
+    <div class="top-grid">
+
+      <!-- Source card -->
+      <div class="card">
+        <div class="card-header">
+          <i data-lucide="folder-open" class="header-icon"></i>
+          <h3>Source</h3>
+          <span class="chip" id="sourceChip">Batch</span>
+        </div>
+
+        <div class="tabs" id="tabContainer">
+          <button class="tab active" data-mode="file">Excel / CSV</button>
+          <button class="tab" data-mode="manual">Manual Link</button>
+          <button class="tab" data-mode="search">Search</button>
+        </div>
+
+        <div id="filePanel">
+          <label>Batch file</label>
+          <div class="row">
+            <input id="inputPath" placeholder="Select .xlsx, .xlsm, or .csv">
+            <button class="btn btn-outline btn-sm" id="chooseFile"><i data-lucide="file-search"></i> Browse</button>
+          </div>
+          <div style="font-size:12px; color:#71717a; margin-top:8px;">
+            First non-link column &rarr; folder name. All URL columns downloaded into that folder.
+          </div>
+        </div>
+
+        <div id="manualPanel" class="hidden">
+          <div class="two-col">
+            <div>
+              <label>Folder name</label>
+              <input id="manualFolder" value="manual_test">
+            </div>
+            <div>
+              <label>Links (one per line)</label>
+              <textarea id="manualLinks" placeholder="https://example.com/image.jpg&#10;https://www.dropbox.com/scl/fo/..."></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div id="searchPanel" class="hidden">
+          <div class="two-col">
+            <div>
+              <label>Search provider</label>
+              <select id="searchProvider">
+                <option value="google">Google Images</option>
+                <option value="koton">Koton website</option>
+                <option value="custom">Custom template</option>
+              </select>
+            </div>
+            <div>
+              <label>Style code file</label>
+              <div class="row">
+                <input id="searchInputPath" placeholder="Excel with codes in col A">
+                <button class="btn btn-outline btn-sm" id="chooseSearchFile"><i data-lucide="file-search"></i></button>
+              </div>
+            </div>
+          </div>
+          <input id="searchTemplate" class="hidden" placeholder="https://example.com/search?q={term}" style="margin-top:12px;">
+          <div style="margin-top:12px;">
+            <label>Quick test terms (one per line)</label>
+            <textarea id="searchTerms" placeholder="STYLE001&#10;STYLE002"></textarea>
+          </div>
+        </div>
+
+        <div class="btn-group" style="margin-top: 20px;">
+          <button class="btn btn-primary btn-sm" id="previewBtn"><i data-lucide="eye"></i> Preview Queue</button>
+          <button class="btn btn-outline btn-sm" id="clearBtn"><i data-lucide="trash-2"></i> Clear</button>
+          <button class="btn btn-outline btn-sm" id="retryFailedBtn"><i data-lucide="rotate-ccw"></i> Retry Failed</button>
+          <button class="btn btn-outline btn-sm" id="templateBtn"><i data-lucide="file-spreadsheet"></i> Template</button>
+        </div>
+
+        <div class="advanced-panel">
+          <div class="advanced-toggle" id="advancedToggle"><i data-lucide="chevron-right"></i> Advanced settings</div>
+          <div class="advanced-body hidden" id="advancedBody">
+            <div class="two-col">
+              <div>
+                <label>HTTP proxy</label>
+                <input id="proxyHttp" placeholder="http://host:port">
+              </div>
+              <div>
+                <label>HTTPS proxy</label>
+                <input id="proxyHttps" placeholder="http://host:port">
+              </div>
+            </div>
+            <div class="two-col" style="margin-top:8px;">
+              <div>
+                <label>Speed limit KB/s</label>
+                <input id="speedLimit" type="number" min="0" value="0">
+              </div>
+              <div>
+                <label>Notify</label>
+                <select id="notifyEnabled">
+                  <option value="true">Enabled</option>
+                  <option value="false">Disabled</option>
+                </select>
+              </div>
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-outline btn-sm" id="saveConfigBtn"><i data-lucide="save"></i> Save</button>
+              <button class="btn btn-outline btn-sm" id="loadConfigBtn"><i data-lucide="folder-open"></i> Load</button>
+              <button class="btn btn-outline btn-sm" id="deleteConfigBtn"><i data-lucide="trash"></i> Delete</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Controls + Output -->
+      <div class="card">
+        <div class="card-header">
+          <i data-lucide="sliders" class="header-icon"></i>
+          <h3>Controls</h3>
+          <span class="chip" id="previewReady">Not loaded</span>
+        </div>
+
+        <div class="two-col">
+          <div>
+            <label>Parallel downloads</label>
+            <input id="workers" type="number" min="1" max="50" value="__DEFAULT_WORKERS__">
+          </div>
+          <div>
+            <label>Timeout (seconds)</label>
+            <input id="timeout" type="number" min="10" max="180" value="__DEFAULT_TIMEOUT__">
+          </div>
+        </div>
+
+        <div class="two-col" style="margin-top:12px;">
+          <div>
+            <label>File mode</label>
+            <select id="fileMode">
+              <option value="all">All files</option>
+              <option value="media">Images + videos</option>
+              <option value="images">Images only</option>
+            </select>
+          </div>
+          <div>
+            <label>Folder naming</label>
+            <select id="folderPattern">
+              <option value="{folder}">Folder only</option>
+              <option value="{row}_{folder}">Row + folder</option>
+              <option value="{provider}_{folder}">Platform + folder</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display:flex; flex-wrap:wrap; gap:16px; margin:16px 0;">
+          <label class="checkbox-wrap"><input id="skipExisting" type="checkbox"> Skip existing</label>
+          <label class="checkbox-wrap"><input id="dedupe" type="checkbox" checked> Deduplicate</label>
+          <label class="checkbox-wrap"><input id="browserMode" type="checkbox"> Browser fallback</label>
+        </div>
+
+        <div class="row" style="margin-top:8px;">
+          <input id="outputPath" placeholder="Output folder" value="__DEFAULT_OUTPUT__" style="flex:1;">
+          <button class="btn btn-outline btn-sm" id="chooseOutput"><i data-lucide="folder"></i> Browse</button>
+          <button class="btn btn-outline btn-sm" id="openOutput"><i data-lucide="external-link"></i> Open</button>
+          <button class="btn btn-outline btn-sm" id="openReport"><i data-lucide="file-text"></i> Report</button>
+          <button class="btn btn-outline btn-sm" id="renameFiles"><i data-lucide="pencil"></i> Rename Files</button>
+        </div>
+
+        <div class="btn-group" style="margin-top:20px;">
+          <button class="btn btn-success" id="startBtn"><i data-lucide="play"></i> Start Download</button>
+          <button class="btn btn-warning" id="pauseBtn" disabled><i data-lucide="pause"></i> Pause</button>
+          <button class="btn btn-danger" id="stopBtn" disabled><i data-lucide="square"></i> Stop</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats + Results row -->
+    <div class="bottom-grid">
+
+      <!-- Progress & stats -->
+      <div class="card">
+        <div class="card-header">
+          <i data-lucide="activity" class="header-icon"></i>
+          <h3>Progress</h3>
+        </div>
+        <div class="stats">
+          <div class="stat-box"><div class="num" id="total">0</div><div class="label">Total</div></div>
+          <div class="stat-box success"><div class="num" id="ok">0</div><div class="label">OK</div></div>
+          <div class="stat-box danger"><div class="num" id="failed">0</div><div class="label">Failed</div></div>
+          <div class="stat-box warning"><div class="num" id="skipped">0</div><div class="label">Skipped</div></div>
+          <div class="stat-box accent"><div class="num" id="files">0</div><div class="label">Files</div></div>
+        </div>
+        <div style="display:flex; justify-content: space-between; font-size: 11px; color: #8b949e; margin-top: 8px; margin-bottom: 8px; padding: 0 5px;">
+          <span id="elapsedTime">Elapsed: 00:00</span>
+          <span id="etaTime">ETA: --</span>
+          <span id="downloadSpeed">0 files / min</span>
+        </div>
+        <div class="progress-wrap"><div class="progress-bar" id="bar"></div></div>
+        <div id="chartWrapper" style="position: relative; height: 60px; width: 100%; margin-top: 10px; display: none;">
+          <canvas id="speedChart"></canvas>
+        </div>
+        <div class="status-line" id="status">Ready</div>
+        <div class="chips" id="failureLine"></div>
+        <div class="chips" id="retryLine" style="margin-top:6px;"></div>
+        <div class="status-line" id="activeLine" style="font-size:12px; color:#a1a1aa; margin-top:8px;"></div>
+        <div class="status-line" id="auditLine" style="font-size:12px; color:#71717a; margin-top:8px;"></div>
+        <div class="chips" id="providerLine" style="margin-top:8px;"></div>
+        <div class="chips" id="healthLine" style="margin-top:8px;"></div>
+      </div>
+
+      <!-- Results table -->
+      <div class="card">
+        <div class="card-header">
+          <i data-lucide="list" class="header-icon"></i>
+          <h3>Results</h3>
+          <span class="chip" id="resultCount">0 rows</span>
+        </div>
+        <div class="filter-row">
+          <select id="resultFilter">
+            <option value="all">All results</option>
+            <option value="ok">OK</option>
+            <option value="failed">Failed</option>
+            <option value="skipped">Skipped</option>
+          </select>
+          <input id="resultSearch" placeholder="Search folder or message...">
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th style="width:50px;">Thumb</th><th style="width:40px;">Row</th><th>Folder</th><th style="width:100px;">Status</th><th style="width:50px;">Files</th><th>Message</th></tr>
+            </thead>
+            <tbody id="resultRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live log -->
+    <div class="card" style="padding:16px 20px;">
+      <div class="card-header" style="margin-bottom: 12px;">
+        <i data-lucide="terminal" class="header-icon"></i>
+        <h3>Live Log</h3>
+      </div>
+      <div class="log-box" id="logs"></div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Save/Load config modal -->
+<div class="modal-overlay" id="configModal">
+  <div class="modal">
+    <h3 id="configModalTitle">Save Config</h3>
+    <label>Config name</label>
+    <input id="configName" placeholder="my_job_settings">
+    <div class="btn-group" style="margin-top:8px;">
+      <button class="btn btn-primary btn-sm" id="configModalOk">Confirm</button>
+      <button class="btn btn-outline btn-sm" id="configModalCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rename files modal -->
+<div class="modal-overlay" id="renameModal">
+  <div class="modal">
+    <h3 id="renameModalTitle">Rename Files</h3>
+    <div class="modal-message" id="renameModalMessage">Rename downloaded files inside each product folder as folder_1, folder_2, ...?</div>
+    <div class="btn-group" style="margin-top:8px;">
+      <button class="btn btn-primary btn-sm" id="renameModalOk">Rename</button>
+      <button class="btn btn-outline btn-sm" id="renameModalCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Initialize Lucide Icons
+lucide.createIcons();
+
+const $ = id => document.getElementById(id);
+let sourceMode = 'file';
+let configModalMode = 'save'; // 'save' | 'load' | 'delete'
+const api = async (url, options = {}) => {
+  const res = await fetch(url, options);
+  const contentType = res.headers.get('content-type') || '';
+  const data = contentType.includes('application/json') ? await res.json() : await res.text();
+  if (!res.ok) {
+    const message = typeof data === 'object' && data ? data.error : data;
+    throw new Error(message || `Request failed (${res.status})`);
+  }
+  return data;
+};
+const postJson = (url, data) => api(url, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(data)
+});
+const esc = t => String(t??'').replace(/[&<>\'\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
+
+const payload = () => ({
+  sourceMode,
+  inputPath: $('inputPath').value.trim(),
+  manualFolder: $('manualFolder').value.trim(),
+  manualLinks: $('manualLinks').value,
+  searchProvider: $('searchProvider').value,
+  searchInputPath: $('searchInputPath').value.trim(),
+  searchTemplate: $('searchTemplate').value.trim(),
+  searchTerms: $('searchTerms').value,
+  output: $('outputPath').value.trim(),
+  workers: Number($('workers').value||50),
+  timeout: Number($('timeout').value||60),
+  fileMode: $('fileMode').value,
+  folderPattern: $('folderPattern').value,
+  qualityMode: 'best',
+  autoFix: 'on',
+  skipExisting: $('skipExisting').checked,
+  dedupe: $('dedupe').checked,
+  browserMode: $('browserMode').checked,
+  proxy: { http: $('proxyHttp').value.trim(), https: $('proxyHttps').value.trim() },
+  speedLimitKbps: Number($('speedLimit').value||0),
+  notifyEnabled: $('notifyEnabled').value === 'true',
+});
+
+// Tabs
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.onclick = () => {
+    sourceMode = btn.dataset.mode;
+    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x===btn));
+    $('filePanel').classList.toggle('hidden', sourceMode!=='file');
+    $('manualPanel').classList.toggle('hidden', sourceMode!=='manual');
+    $('searchPanel').classList.toggle('hidden', sourceMode!=='search');
+    $('sourceChip').textContent = {file:'Batch', manual:'Manual', search:'Search'}[sourceMode]||'Batch';
+    $('previewReady').textContent = 'Not loaded';
+  };
+});
+$('searchProvider').onchange = () => $('searchTemplate').classList.toggle('hidden', $('searchProvider').value!=='custom');
+
+// Advanced toggle
+$('advancedToggle').onclick = () => {
+  const open = $('advancedToggle').classList.toggle('open');
+  $('advancedBody').classList.toggle('hidden', !open);
+};
+
+// Pickers
+$('chooseFile').onclick = async () => { const d=await api('/api/select-file'); if(d.path) $('inputPath').value=d.path; };
+$('chooseSearchFile').onclick = async () => { const d=await api('/api/select-file'); if(d.path) $('searchInputPath').value=d.path; };
+$('chooseOutput').onclick = async () => { const d=await api('/api/select-output'); if(d.path) $('outputPath').value=d.path; };
+$('openOutput').onclick = () => postJson('/api/open-output', {path:$('outputPath').value});
+$('openReport').onclick = async () => { try{await postJson('/api/open-report',{path:$('outputPath').value});}catch(e){alert(e.message);} };
+$('renameFiles').onclick = () => {
+  $('renameModalTitle').textContent = 'Rename Files';
+  $('renameModalMessage').textContent = 'Rename downloaded files inside each product folder as folder_1, folder_2, ...?';
+  $('renameModalOk').textContent = 'Rename';
+  $('renameModalCancel').textContent = 'Cancel';
+  $('renameModalCancel').classList.remove('hidden');
+  $('renameModalOk').onclick = runRenameFiles;
+  $('renameModal').classList.add('open');
+};
+$('renameModalCancel').onclick = () => $('renameModal').classList.remove('open');
+async function runRenameFiles() {
+  $('renameModalOk').disabled = true;
+  $('renameModalOk').textContent = 'Renaming...';
+  try {
+    const d = await postJson('/api/rename-files', {path:$('outputPath').value});
+    $('renameModalTitle').textContent = 'Rename Complete';
+    $('renameModalMessage').textContent = `Renamed ${d.renamed || 0} file(s) in ${d.folders || 0} folder(s).\nCleaned ${d.removedMetadata || 0} metadata file(s).`;
+    $('renameModalOk').textContent = 'OK';
+    $('renameModalCancel').classList.add('hidden');
+    $('renameModalOk').onclick = () => {
+      $('renameModal').classList.remove('open');
+      refresh();
+    };
+  } catch(e) {
+    $('renameModalTitle').textContent = 'Rename Failed';
+    $('renameModalMessage').textContent = e.message;
+    $('renameModalOk').textContent = 'OK';
+    $('renameModalCancel').classList.add('hidden');
+    $('renameModalOk').onclick = () => $('renameModal').classList.remove('open');
+  } finally {
+    $('renameModalOk').disabled = false;
+  }
+}
+$('renameModalOk').onclick = runRenameFiles;
+$('clearBtn').onclick = () => {
+  $('inputPath').value='';
+  $('manualLinks').value='';
+  $('manualFolder').value='manual_test';
+  $('searchInputPath').value='';
+  $('searchTerms').value='';
+  updatePreview({total:0,folders:0,providers:{},sample:[]});
+};
+
+$('previewBtn').onclick = async () => { try{ const d=await postJson('/api/preview', payload()); updatePreview(d); }catch(e){alert(e.message);} };
+$('startBtn').onclick = async () => { $('startBtn').disabled=true; try{ await postJson('/api/start', payload()); }catch(e){alert(e.message); $('startBtn').disabled=false;} };
+$('stopBtn').onclick = async () => { try{ await postJson('/api/stop', {}); }catch(e){alert(e.message);} };
+$('pauseBtn').onclick = async () => { try{ await postJson('/api/pause', {}); }catch(e){alert(e.message);} };
+$('retryFailedBtn').onclick = async () => { try{ sourceMode='retry'; document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active')); await postJson('/api/start', payload()); }catch(e){alert(e.message);} };
+$('templateBtn').onclick = async () => { try{ await postJson('/api/create-template', {path:$('outputPath').value}); }catch(e){alert(e.message);} };
+$('resultFilter').onchange = refresh;
+$('resultSearch').oninput = refresh;
+
+// Config save / load / delete
+function openConfigModal(mode) {
+  configModalMode = mode;
+  $('configModalTitle').textContent = {save:'Save Config', load:'Load Config', delete:'Delete Config'}[mode];
+  $('configName').value = '';
+  $('configModal').classList.add('open');
+  setTimeout(()=>$('configName').focus(), 50);
+}
+$('configModalCancel').onclick = () => $('configModal').classList.remove('open');
+$('saveConfigBtn').onclick = () => openConfigModal('save');
+$('loadConfigBtn').onclick = () => openConfigModal('load');
+$('deleteConfigBtn').onclick = () => openConfigModal('delete');
+$('configModalOk').onclick = async () => {
+  const name = $('configName').value.trim() || 'default';
+  try {
+    if (configModalMode === 'save') {
+      await postJson('/api/save-config', { name, settings: payload() });
+      alert('Config saved: ' + name);
+    } else if (configModalMode === 'load') {
+      const d = await postJson('/api/load-config', { name });
+      applyConfig(d.settings || {});
+      alert('Config loaded: ' + name);
+    } else {
+      await postJson('/api/delete-config', { name });
+      alert('Config deleted: ' + name);
+    }
+  } catch(e) { alert(e.message); }
+  $('configModal').classList.remove('open');
+};
+
+function applyConfig(s) {
+  if (!s) return;
+  if (s.workers != null) $('workers').value = s.workers;
+  if (s.timeout != null) $('timeout').value = s.timeout;
+  if (s.fileMode) $('fileMode').value = s.fileMode;
+  if (s.folderPattern) $('folderPattern').value = s.folderPattern;
+  if (s.skipExisting != null) $('skipExisting').checked = s.skipExisting;
+  if (s.dedupe != null) $('dedupe').checked = s.dedupe;
+  if (s.browserMode != null) $('browserMode').checked = s.browserMode;
+  if (s.proxy) {
+    $('proxyHttp').value = s.proxy.http || '';
+    $('proxyHttps').value = s.proxy.https || '';
+  }
+  if (s.speedLimitKbps != null) $('speedLimit').value = s.speedLimitKbps;
+  if (s.notifyEnabled != null) $('notifyEnabled').value = String(s.notifyEnabled);
+}
+
+function updatePreview(data) {
+  $('previewReady').textContent = data.total ? 'Loaded' : 'Not loaded';
+  $('providerLine').innerHTML = Object.entries(data.providers||{}).map(([k,v])=>`<span class="chip primary">${esc(k)}: ${v}</span>`).join('');
+  renderRows((data.sample||[]).map(r=>({...r, status:r.provider, files:'-', message:r.url})));
+}
+
+function renderRows(rows) {
+  const mode = $('resultFilter').value;
+  const term = $('resultSearch').value.trim().toLowerCase();
+  const filtered = (rows||[]).filter(r => {
+    const st = String(r.status||'').toLowerCase();
+    const modeOk = mode==='all' || st===mode || (mode==='failed' && st!=='ok' && !st.startsWith('skipped')) || (mode==='skipped' && st.startsWith('skipped'));
+    const hay = `${r.folder||''} ${r.message||''} ${r.provider||''} ${r.url||''}`.toLowerCase();
+    return modeOk && (!term || hay.includes(term));
+  });
+  $('resultCount').textContent = filtered.length + ' rows';
+  $('resultRows').innerHTML = filtered.slice().reverse().map(r => `
+    <tr>
+      <td>${r.thumb ? `<img class="thumb" src="/api/thumb?path=${encodeURIComponent(r.thumb)}">` : `<div class="thumb-empty"><i data-lucide="image" style="width:16px;height:16px"></i></div>`}</td>
+      <td>${r.row}</td>
+      <td style="font-weight:500;">${esc(r.folder)}</td>
+      <td><span class="badge-status ${r.status}">${esc(r.status||r.provider||'')}</span></td>
+      <td>${r.files??'-'}</td>
+      <td style="color:#a1a1aa; font-size:12px;">${esc(r.message||r.url||'')}${r.attempts > 1 ? ` · ${r.attempts} attempts` : ''}${r.duration ? ` · ${Number(r.duration).toFixed(1)}s` : ''}</td>
+    </tr>`).join('');
+  lucide.createIcons();
+}
+
+function fmtSeconds(total) {
+  total = Math.max(0, Math.floor(total || 0));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return h ? `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function fmtBytes(bytes) {
+  bytes = Number(bytes || 0);
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${bytes} B`;
+}
+
+async function refresh() {
+  try {
+    const data = await api('/api/status');
+    $('status').innerHTML = `<strong>Status:</strong> ${data.status||'Ready'}`;
+    $('total').textContent = data.total||0;
+    $('ok').textContent = data.ok||0;
+    $('failed').textContent = data.failed||0;
+    $('skipped').textContent = data.skipped||0;
+    $('files').textContent = data.files||0;
+    if (data.start_time > 0 && data.running) {
+      $('elapsedTime').textContent = `Elapsed: ${fmtSeconds(data.elapsedSeconds)}`;
+      $('etaTime').textContent = data.done ? `ETA: ${fmtSeconds(data.etaSeconds)}` : 'ETA: --';
+      $('downloadSpeed').textContent = `${Number(data.filesPerMin||0).toFixed(1)} files/min | ${Number(data.mbPerSec||0).toFixed(2)} MB/s`;
+      document.title = `${Number(data.filesPerMin||0).toFixed(1)} files/min · ${Number(data.mbPerSec||0).toFixed(2)} MB/s - Media Download Manager`;
+
+      if (typeof speedChart !== 'undefined' && speedChart) {
+        const wrapper = document.getElementById('chartWrapper');
+        if (wrapper && wrapper.style.display === 'none') {
+          wrapper.style.display = 'block';
+          speedChart.data.labels = [];
+          speedChart.data.datasets[0].data = [];
+        }
+        if (speedChart.data.labels.length > 30) {
+          speedChart.data.labels.shift();
+          speedChart.data.datasets[0].data.shift();
+        }
+        speedChart.data.labels.push('');
+        speedChart.data.datasets[0].data.push(data.mbPerSec || 0);
+        speedChart.update();
+      }
+
+    } else if (!data.running && data.start_time > 0) {
+      // Don't update time if not running, keeps final time
+      $('etaTime').textContent = 'ETA: --';
+    } else {
+      $('elapsedTime').textContent = 'Elapsed: 00:00';
+      $('etaTime').textContent = 'ETA: --';
+      $('downloadSpeed').textContent = '0 files / min';
+      document.title = 'Media Download Manager';
+      if (typeof speedChart !== 'undefined' && speedChart) {
+        const wrapper = document.getElementById('chartWrapper');
+        if (wrapper) wrapper.style.display = 'none';
+      }
+
+    }
+    $('failureLine').innerHTML = Object.entries(data.failureGroups||{}).map(([k,v])=>`<span class="chip danger">${esc(k)}: ${v}</span>`).join('');
+    $('retryLine').innerHTML = Object.entries(data.retryQueue||{}).map(([k,v])=>`<span class="chip warning">retry ${esc(k)}: ${v}</span>`).join('');
+    $('activeLine').textContent = (data.activeLinks||[]).length ? `Active: ${(data.activeLinks||[]).map(x=>`#${x.row} ${x.provider} a${x.attempt} ${fmtBytes(x.bytes)}`).join(' | ')}` : (data.lastActivity||'');
+    $('auditLine').textContent = data.audit?.summary||'';
+    const pct = data.total ? Math.round((data.done/data.total)*100) : 0;
+    $('bar').style.width = pct+'%';
+    $('logs').textContent = (data.logs||[]).join('\n');
+    $('logs').scrollTop = $('logs').scrollHeight;
+    $('startBtn').disabled = data.running;
+    $('stopBtn').disabled = !data.running;
+    $('pauseBtn').disabled = !data.running;
+    $('pauseBtn').innerHTML = data.paused ? '<i data-lucide="play"></i> Resume' : '<i data-lucide="pause"></i> Pause';
+    const dot = $('headerDot');
+    if (data.running) { dot.className='dot amber'; $('headerStatusText').textContent='Running'; }
+    else if (data.failed>0 && data.ok===0) { dot.className='dot red'; $('headerStatusText').textContent='Error'; }
+    else if (data.ok>0) { dot.className='dot green'; $('headerStatusText').textContent='Done'; }
+    else { dot.className='dot gray'; $('headerStatusText').textContent='Ready'; }
+    if (data.total) {
+      $('previewReady').textContent='Loaded';
+      $('providerLine').innerHTML = Object.entries(data.providers||{}).map(([k,v])=>`<span class="chip primary">${esc(k)}: ${v}</span>`).join('');
+    }
+    if ((data.rows||[]).length) renderRows(data.rows||[]);
+    if (!data.running && $('startBtn').disabled) $('startBtn').disabled = false;
+    lucide.createIcons();
+  } catch(e) { $('status').innerHTML='<strong style="color:#ef4444;"><i data-lucide="alert-triangle" style="display:inline-block; vertical-align:middle; width:16px; height:16px; margin-right:4px;"></i>Server disconnected</strong>'; lucide.createIcons(); }
+}
+setInterval(refresh, 900);
+
+// Browser Notification on completion (when tab is hidden)
+let lastRunning = false;
+setInterval(async () => {
+  try {
+    const data = await api('/api/status');
+    const done = !data.running;
+    if (lastRunning && done && data.total > 0 && data.notifyEnabled) {
+      if ('Notification' in window && Notification.permission === 'granted') {
+        const body = `Done: ${data.ok} ok, ${data.skipped} skipped, ${data.failed} failed, ${data.files} files`;
+        new Notification('Media Download Manager', { body });
+      }
+    }
+    lastRunning = data.running;
+  } catch(e) {}
+}, 3000);
+// Request notification permission once on first interaction
+document.addEventListener('click', function once() {
+  if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+  document.removeEventListener('click', once);
+}, { once: true });
+
+// --- Live Speed Graph ---
+let speedChart = null;
+setTimeout(() => {
+  const ctx = document.getElementById('speedChart');
+  if (ctx) {
+    speedChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'MB/s',
+          data: [],
+          borderColor: '#10b981',
+          backgroundColor: 'rgba(16, 185, 129, 0.1)',
+          borderWidth: 2,
+          fill: true,
+          tension: 0.4,
+          pointRadius: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        scales: {
+          x: { display: false },
+          y: {
+            beginAtZero: true,
+            grid: { color: '#334155' },
+            ticks: { color: '#94a3b8', font: { size: 10 } }
+          }
+        },
+        plugins: { legend: { display: false } }
+      }
+    });
+  }
+}, 500);
+
+// --- Drag and Drop Logic ---
+setTimeout(() => {
+  const linkBox = $('manualLinks');
+  if (linkBox) {
+    linkBox.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      linkBox.style.borderColor = '#10b981';
+      linkBox.style.boxShadow = '0 0 0 2px rgba(16, 185, 129, 0.25)';
+    });
+    linkBox.addEventListener('dragleave', () => {
+      linkBox.style.borderColor = '#475569';
+      linkBox.style.boxShadow = 'none';
+    });
+    linkBox.addEventListener('drop', (e) => {
+      e.preventDefault();
+      linkBox.style.borderColor = '#475569';
+      linkBox.style.boxShadow = 'none';
+      
+      if (e.dataTransfer.files.length > 0) {
+        const file = e.dataTransfer.files[0];
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          linkBox.value += (linkBox.value ? '\n' : '') + ev.target.result;
+        };
+        reader.readAsText(file);
+      } else {
+        const text = e.dataTransfer.getData('text');
+        if (text) linkBox.value += (linkBox.value ? '\n' : '') + text;
+      }
+    });
+  }
+}, 500);
+
+
+// Supabase config
+const SUPABASE_URL = 'https://wzjcikgxhyiotblzourw.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_cGOBeNI0l_fuapJR90nmLA_mm2SUsvT';
+let supabaseClient;
+try {
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+} catch (e) {}
+
+async function logout() {
+  document.cookie = 'sb-access-token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+  if (supabaseClient) {
+    await supabaseClient.auth.signOut();
+  }
+  window.location.href = '/login';
+}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Output directory for downloads
+/output/
+# If they used a custom path, they shouldn't commit their downloads anyway, but we'll ignore mp4/jpg in root just in case
+*.mp4
+*.mkv
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webm
+*.part
+*.ytdl
+
+# Virtual environment
+venv/
+env/
+ENV/
+.venv/
+
+# Environment variables
+.env
+.env.local
+
+# IDEs
+.vscode/
+.idea/
