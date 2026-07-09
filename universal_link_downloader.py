@@ -18,11 +18,20 @@ import zipfile
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
-from tkinter.scrolledtext import ScrolledText
-from typing import Callable, Dict, List, Optional, Tuple
+try:
+    from tkinter import filedialog, messagebox, ttk
+    from tkinter.scrolledtext import ScrolledText
+    import tkinter as tk
+    TKINTER_AVAILABLE = True
+except (ImportError, Exception):
+    tk = None
+    ttk = None
+    filedialog = None
+    messagebox = None
+    ScrolledText = None
+    TKINTER_AVAILABLE = False
 
-import tkinter as tk
+from typing import Callable, Dict, List, Optional, Tuple
 
 import requests
 
