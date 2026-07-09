@@ -1157,7 +1157,8 @@ def tasks_from_rows(rows):
     return tasks
 
 
-class App(tk.Tk):
+if TKINTER_AVAILABLE:
+  class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(f"{APP_TITLE} v{APP_VERSION}")
@@ -1370,9 +1371,13 @@ def main():
 
         web_app.main()
         return 0
-    app = App()
-    app.mainloop()
-    return 0
+    if TKINTER_AVAILABLE:
+        app = App()
+        app.mainloop()
+        return 0
+    else:
+        print("GUI mode requires tkinter. Use --cli mode on headless servers.")
+        return 1
 
 
 if __name__ == "__main__":
