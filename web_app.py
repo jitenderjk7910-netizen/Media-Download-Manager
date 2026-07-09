@@ -24,7 +24,11 @@ from email.parser import BytesParser
 from email.policy import default as email_policy
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from tkinter import Tk, filedialog
+try:
+    from tkinter import Tk, filedialog
+    TKINTER_AVAILABLE = True
+except (ImportError, Exception):
+    TKINTER_AVAILABLE = False
 
 import requests
 
@@ -264,6 +268,8 @@ def _send_desktop_notification(title: str, body: str) -> None:
 
 
 def pick_file():
+    if not TKINTER_AVAILABLE:
+        raise RuntimeError("File picker is not available in cloud/server mode. Please type the path manually.")
     root = Tk()
     root.withdraw()
     root.attributes("-topmost", True)
@@ -276,6 +282,8 @@ def pick_file():
 
 
 def pick_output():
+    if not TKINTER_AVAILABLE:
+        raise RuntimeError("Folder picker is not available in cloud/server mode. Please type the path manually.")
     root = Tk()
     root.withdraw()
     root.attributes("-topmost", True)
