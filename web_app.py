@@ -90,8 +90,14 @@ from app_config import (
     UPLOAD_DIR,
 )
 
-HOST = EFFECTIVE_HOST
-PORT = EFFECTIVE_PORT
+# On cloud servers (Render etc.), use environment PORT and bind to all interfaces
+_env_port = os.environ.get("PORT")
+if _env_port:
+    HOST = "0.0.0.0"
+    PORT = int(_env_port)
+else:
+    HOST = EFFECTIVE_HOST
+    PORT = EFFECTIVE_PORT
 
 # Ensure runtime directories exist.
 DEFAULT_OUTPUT.mkdir(parents=True, exist_ok=True)
@@ -1449,7 +1455,9 @@ def main():
     server, port = create_server()
     url = f"http://{HOST}:{port}/"
     print(f"Media Download Manager v{APP_VERSION} web UI: {url}")
-    webbrowser.open(url)
+    # Don't try to open a browser on headless cloud servers
+    if not os.environ.get("PORT"):
+        webbrowser.open(url)
     server.serve_forever()
 
 
