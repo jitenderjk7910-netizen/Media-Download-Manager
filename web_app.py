@@ -1319,7 +1319,6 @@ class Handler(BaseHTTPRequestHandler):
             
         try:
             payload = self.read_json()
-            payload = self.read_json()
             if path == "/api/start":
                 start_job(payload)
                 self.send_json({"ok": True})
