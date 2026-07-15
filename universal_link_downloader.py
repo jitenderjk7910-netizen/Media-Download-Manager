@@ -51,6 +51,7 @@ from app_config import (
     CHUNK_SIZE,
     DEFAULT_TIMEOUT,
     DEFAULT_USER_AGENT,
+    DEFAULT_SESSION_HEADERS,
     DEFAULT_WORKERS,
     DROPBOX_USER_AGENT,
     LOG_NAME,
@@ -337,7 +338,7 @@ class UniversalDownloader:
         self.report_lock = threading.Lock()
         self.report_rows = []
         self.session = requests.Session()
-        self.session.headers.update({"User-Agent": DEFAULT_USER_AGENT})
+        self.session.headers.update(DEFAULT_SESSION_HEADERS)
         # Optional proxy support ({"http": ..., "https": ...}).
         proxy = proxy or {}
         clean_proxy = {}
@@ -850,10 +851,14 @@ class UniversalDownloader:
                 headers=request_headers or None,
             )
             if response.status_code in (403, 401) and not headers:
-                # Akamai/Cloudflare often block spoofed browser UAs due to TLS fingerprint mismatch.
-                # Retry with the honest python-requests UA.
+                # Bot-protection retry: add Referer = origin of the URL
                 response.close()
-                request_headers["User-Agent"] = requests.utils.default_user_agent()
+                parsed = urllib.parse.urlsplit(url)
+                referer = f"{parsed.scheme}://{parsed.netloc}/"
+                request_headers.update({
+                    "Referer": referer,
+                    "Sec-Fetch-Site": "same-origin",
+                })
                 client = requests
                 response = client.get(
                     url,

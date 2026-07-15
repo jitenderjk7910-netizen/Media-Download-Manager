@@ -92,8 +92,18 @@ MAX_THUMB_SIZE: int = 10 * 1024 * 1024  # 10 MB cap for /api/thumb serving
 
 DEFAULT_USER_AGENT: str = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125 Safari/537.36"
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
+DEFAULT_SESSION_HEADERS: dict = {
+    "User-Agent": DEFAULT_USER_AGENT,
+    "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Sec-Fetch-Dest": "image",
+    "Sec-Fetch-Mode": "no-cors",
+    "Sec-Fetch-Site": "cross-site",
+    "Connection": "keep-alive",
+}
 DROPBOX_USER_AGENT: str = "python-requests/2.32"
 
 # File extension groups
