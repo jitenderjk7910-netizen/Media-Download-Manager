@@ -362,46 +362,47 @@ class UniversalDownloader:
         total = len(tasks)
         done = 0
 
-        with ThreadPoolExecutor(max_workers=self.workers) as executor:
-            pending_tasks = iter(tasks)
-            futures = {}
+        try:
+            with ThreadPoolExecutor(max_workers=self.workers) as executor:
+                pending_tasks = iter(tasks)
+                futures = {}
 
-            def submit_next():
-                if stop_event is not None and stop_event.is_set():
-                    return False
-                while pause_event is not None and pause_event.is_set():
+                def submit_next():
                     if stop_event is not None and stop_event.is_set():
                         return False
-                    time.sleep(PAUSE_POLL_INTERVAL)
-                try:
-                    task_item = next(pending_tasks)
-                except StopIteration:
-                    return False
-                futures[executor.submit(self.download_task, task_item)] = task_item
-                return True
-
-            for _ in range(self.workers):
-                if not submit_next():
-                    break
-
-            while futures:
-                done_futures, _ = wait(futures, return_when=FIRST_COMPLETED)
-                for future in done_futures:
-                    task = futures.pop(future)
+                    while pause_event is not None and pause_event.is_set():
+                        if stop_event is not None and stop_event.is_set():
+                            return False
+                        time.sleep(PAUSE_POLL_INTERVAL)
                     try:
-                        result = future.result()
-                    except Exception as exc:
-                        result = DownloadResult("failed", 0, str(exc))
-                    done += 1
-                    results.append((task, result))
-                    self.append_report(task, result)
-                    if progress:
-                        progress(done, total, task, result)
-                    if stop_event is None or not stop_event.is_set():
-                        submit_next()
+                        task_item = next(pending_tasks)
+                    except StopIteration:
+                        return False
+                    futures[executor.submit(self.download_task, task_item)] = task_item
+                    return True
 
-            if stop_event is not None and stop_event.is_set():
-                executor.shutdown(wait=False, cancel_futures=True)
+                for _ in range(self.workers):
+                    if not submit_next():
+                        break
+
+                while futures:
+                    done_futures, _ = wait(futures, return_when=FIRST_COMPLETED)
+                    for future in done_futures:
+                        task = futures.pop(future)
+                        try:
+                            result = future.result()
+                        except Exception as exc:
+                            result = DownloadResult("failed", 0, str(exc))
+                        done += 1
+                        results.append((task, result))
+                        self.append_report(task, result)
+                        if progress:
+                            progress(done, total, task, result)
+                        if stop_event is None or not stop_event.is_set():
+                            submit_next()
+
+                if stop_event is not None and stop_event.is_set():
+                    executor.shutdown(wait=False, cancel_futures=True)
 
         finally:
             partial_dir = self.output_dir / ".partials"
@@ -413,7 +414,8 @@ class UniversalDownloader:
 
         self.log(f"Finished {done} of {total} items")
         if self.stop_event and self.stop_event.is_set():
-                executor.shutdown(wait=False, cancel_futures=True)
+            # Already shut down executor, just logging
+            pass
 
         self.write_xlsx_report()
         return results
