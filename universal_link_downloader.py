@@ -403,6 +403,18 @@ class UniversalDownloader:
             if stop_event is not None and stop_event.is_set():
                 executor.shutdown(wait=False, cancel_futures=True)
 
+        finally:
+            partial_dir = self.output_dir / ".partials"
+            if partial_dir.exists():
+                try:
+                    shutil.rmtree(partial_dir, ignore_errors=True)
+                except Exception:
+                    pass
+
+        self.log(f"Finished {done} of {total} items")
+        if self.stop_event and self.stop_event.is_set():
+                executor.shutdown(wait=False, cancel_futures=True)
+
         self.write_xlsx_report()
         return results
 

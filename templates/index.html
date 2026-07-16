@@ -866,7 +866,7 @@ async function refresh() {
     if ((data.rows||[]).length) renderRows(data.rows||[]);
     if (!data.running && $('startBtn').disabled) $('startBtn').disabled = false;
     lucide.createIcons();
-  } catch(e) { $('status').innerHTML='<strong style="color:#ef4444;"><i data-lucide="alert-triangle" style="display:inline-block; vertical-align:middle; width:16px; height:16px; margin-right:4px;"></i>Server disconnected</strong>'; lucide.createIcons(); }
+  } catch(e) { $('status').innerHTML='<strong style="color:#ef4444;"><i data-lucide="loader" style="display:inline-block; vertical-align:middle; width:16px; height:16px; margin-right:4px;" class="lucide-spin"></i>Reconnecting (Network Busy)...</strong>'; lucide.createIcons(); }
 }
 setInterval(refresh, 900);
 
