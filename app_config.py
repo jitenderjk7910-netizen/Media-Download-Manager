@@ -49,8 +49,8 @@ PORT_FALLBACK_LIMIT: int = 40
 # ---------------------------------------------------------------------------
 # Built-in authentication (optional — leave blank to run open)
 # ---------------------------------------------------------------------------
-AUTH_USERNAME: str = os.environ.get("USERNAME", "")
-AUTH_PASSWORD: str = os.environ.get("PASSWORD", "")
+AUTH_USERNAME: str = os.environ.get("MDM_USERNAME", "")
+AUTH_PASSWORD: str = os.environ.get("MDM_PASSWORD", "")
 # Secret used to sign session cookies. Auto-generated if not provided.
 SESSION_SECRET: str = os.environ.get(
     "SESSION_SECRET",
