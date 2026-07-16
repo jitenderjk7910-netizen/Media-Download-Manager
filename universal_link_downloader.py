@@ -1022,6 +1022,19 @@ class UniversalDownloader:
             )
             if not any(signatures):
                 return f"Image payload failed signature validation ({content_type})."
+            
+            # Check for EOF truncation in JPEGs and PNGs
+            if signatures[0] or signatures[1]:
+                with path.open("rb") as fh:
+                    fh.seek(0, 2)
+                    size = fh.tell()
+                    if size > 1024:
+                        fh.seek(size - 1024)
+                        tail = fh.read()
+                        if signatures[0] and b"\xff\xd9" not in tail:
+                            return "Corrupt/truncated JPEG (missing EOI marker)."
+                        if signatures[1] and b"IEND" not in tail:
+                            return "Corrupt/truncated PNG (missing IEND marker)."
         return ""
 
     def extract_archive(self, archive_path, target):

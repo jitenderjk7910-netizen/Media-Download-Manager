@@ -375,6 +375,19 @@ def _load_login_html(error: str = "") -> str:
 </body>
 </html>"""
 
+def pick_output() -> str:
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        path = filedialog.askdirectory(title="Select Output Folder")
+        root.destroy()
+        return path or ""
+    except Exception:
+        return ""
+
 def _load_html() -> str:
     """Load the frontend from templates/index.html (kept out of this module)."""
     template_path = TEMPLATES_DIR / "index.html"
@@ -1501,6 +1514,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_html(page)
             elif path == "/api/status":
                 self.send_json(STATE.snapshot())
+            elif path == "/api/select-output":
+                self.send_json({"path": pick_output()})
             elif path == "/api/thumb":
                 query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
                 thumb_path = query.get("path", [""])[0]

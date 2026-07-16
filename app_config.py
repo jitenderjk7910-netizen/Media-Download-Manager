@@ -76,7 +76,7 @@ ALLOWED_ORIGINS: list = [
 # ---------------------------------------------------------------------------
 # Rate limiting
 # ---------------------------------------------------------------------------
-RATE_LIMIT_REQUESTS: int = int(os.environ.get("RATE_LIMIT_REQUESTS", "120"))
+RATE_LIMIT_REQUESTS: int = int(os.environ.get("RATE_LIMIT_REQUESTS", "500"))
 RATE_LIMIT_WINDOW: int = int(os.environ.get("RATE_LIMIT_WINDOW", "60"))  # seconds
 
 # ---------------------------------------------------------------------------
@@ -88,7 +88,7 @@ PRODUCTION: bool = os.environ.get("PRODUCTION", "0").strip() in ("1", "true", "y
 # ---------------------------------------------------------------------------
 # Download defaults
 # ---------------------------------------------------------------------------
-DEFAULT_WORKERS: int = 50
+DEFAULT_WORKERS: int = 10
 MIN_WORKERS: int = 1
 MAX_WORKERS: int = 50
 DEFAULT_TIMEOUT: int = 60

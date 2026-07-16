@@ -425,6 +425,7 @@ tr:hover { background: #1e293b; }
 
         <div class="row" style="margin-top:8px;">
           <input id="outputPath" placeholder="Output folder" value="__DEFAULT_OUTPUT__" style="flex:1;">
+          <button class="btn btn-outline btn-sm" id="chooseOutput"><i data-lucide="folder"></i> Browse</button>
           <button class="btn btn-outline btn-sm" id="openOutput"><i data-lucide="external-link"></i> Open</button>
           <button class="btn btn-outline btn-sm" id="openReport"><i data-lucide="file-text"></i> Report</button>
           <button class="btn btn-outline btn-sm" id="renameFiles"><i data-lucide="pencil"></i> Rename Files</button>
@@ -653,6 +654,12 @@ $('chooseSearchFile').onclick = () => {
   };
   fileUploadInput.click();
 };
+
+$('chooseOutput').onclick = async () => { 
+  const d = await api('/api/select-output'); 
+  if (d.path) $('outputPath').value = d.path; 
+};
+
 $('openOutput').onclick = () => postJson('/api/open-output', {path:$('outputPath').value});
 $('openReport').onclick = async () => { try{await postJson('/api/open-report',{path:$('outputPath').value});}catch(e){alert(e.message);} };
 $('renameFiles').onclick = () => {
