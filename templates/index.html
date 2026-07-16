@@ -425,7 +425,6 @@ tr:hover { background: #1e293b; }
 
         <div class="row" style="margin-top:8px;">
           <input id="outputPath" placeholder="Output folder" value="__DEFAULT_OUTPUT__" style="flex:1;">
-          <button class="btn btn-outline btn-sm" id="chooseOutput"><i data-lucide="folder"></i> Browse</button>
           <button class="btn btn-outline btn-sm" id="openOutput"><i data-lucide="external-link"></i> Open</button>
           <button class="btn btn-outline btn-sm" id="openReport"><i data-lucide="file-text"></i> Report</button>
           <button class="btn btn-outline btn-sm" id="renameFiles"><i data-lucide="pencil"></i> Rename Files</button>
@@ -605,10 +604,55 @@ $('advancedToggle').onclick = () => {
   $('advancedBody').classList.toggle('hidden', !open);
 };
 
-// Pickers
-$('chooseFile').onclick = async () => { const d=await api('/api/select-file'); if(d.path) $('inputPath').value=d.path; };
-$('chooseSearchFile').onclick = async () => { const d=await api('/api/select-file'); if(d.path) $('searchInputPath').value=d.path; };
-$('chooseOutput').onclick = async () => { const d=await api('/api/select-output'); if(d.path) $('outputPath').value=d.path; };
+// Hidden file input for web uploads
+const fileUploadInput = document.createElement('input');
+fileUploadInput.type = 'file';
+fileUploadInput.accept = '.csv,.xlsx,.xlsm';
+fileUploadInput.style.display = 'none';
+document.body.appendChild(fileUploadInput);
+
+async function uploadFile(file) {
+  const res = await fetch('/api/upload', {
+    method: 'POST',
+    headers: { 'X-Filename': file.name },
+    body: file
+  });
+  if (!res.ok) throw new Error('Upload failed');
+  const d = await res.json();
+  return d.path;
+}
+
+$('chooseFile').onclick = () => {
+  fileUploadInput.onchange = async (e) => {
+    if (e.target.files.length) {
+      try {
+        $('inputPath').value = 'Uploading...';
+        $('inputPath').value = await uploadFile(e.target.files[0]);
+      } catch(err) {
+        alert(err.message);
+        $('inputPath').value = '';
+      }
+    }
+    fileUploadInput.value = '';
+  };
+  fileUploadInput.click();
+};
+
+$('chooseSearchFile').onclick = () => {
+  fileUploadInput.onchange = async (e) => {
+    if (e.target.files.length) {
+      try {
+        $('searchInputPath').value = 'Uploading...';
+        $('searchInputPath').value = await uploadFile(e.target.files[0]);
+      } catch(err) {
+        alert(err.message);
+        $('searchInputPath').value = '';
+      }
+    }
+    fileUploadInput.value = '';
+  };
+  fileUploadInput.click();
+};
 $('openOutput').onclick = () => postJson('/api/open-output', {path:$('outputPath').value});
 $('openReport').onclick = async () => { try{await postJson('/api/open-report',{path:$('outputPath').value});}catch(e){alert(e.message);} };
 $('renameFiles').onclick = () => {

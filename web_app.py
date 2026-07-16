@@ -1501,10 +1501,6 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_html(page)
             elif path == "/api/status":
                 self.send_json(STATE.snapshot())
-            elif path == "/api/select-file":
-                self.send_json({"path": pick_file()})
-            elif path == "/api/select-output":
-                self.send_json({"path": pick_output()})
             elif path == "/api/thumb":
                 query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
                 thumb_path = query.get("path", [""])[0]
@@ -1539,6 +1535,24 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         try:
+            if path == "/api/upload":
+                # Handle raw file upload
+                length = int(self.headers.get("Content-Length", "0"))
+                filename = self.headers.get("X-Filename", "uploaded_file.csv")
+                safe_name = "".join(c for c in filename if c.isalnum() or c in ".-_")
+                if not safe_name: safe_name = "upload.csv"
+                file_path = UPLOAD_DIR / f"{int(time.time())}_{safe_name}"
+                with open(file_path, "wb") as f:
+                    # Stream the upload to avoid loading large files in memory
+                    remaining = length
+                    while remaining > 0:
+                        chunk = self.rfile.read(min(remaining, 65536))
+                        if not chunk: break
+                        f.write(chunk)
+                        remaining -= len(chunk)
+                self.send_json({"path": str(file_path.resolve())})
+                return
+
             payload = self.read_json()
             if path == "/api/start":
                 start_job(payload)
