@@ -42,9 +42,48 @@ APP_VERSION: str = "2.0"
 # ---------------------------------------------------------------------------
 # Web server
 # ---------------------------------------------------------------------------
-HOST: str = "127.0.0.1"
-PORT: int = 8080
+HOST: str = os.environ.get("HOST", "0.0.0.0")
+PORT: int = int(os.environ.get("PORT", "8080"))
 PORT_FALLBACK_LIMIT: int = 40
+
+# ---------------------------------------------------------------------------
+# Built-in authentication (optional — leave blank to run open)
+# ---------------------------------------------------------------------------
+AUTH_USERNAME: str = os.environ.get("USERNAME", "")
+AUTH_PASSWORD: str = os.environ.get("PASSWORD", "")
+# Secret used to sign session cookies. Auto-generated if not provided.
+SESSION_SECRET: str = os.environ.get(
+    "SESSION_SECRET",
+    __import__("secrets").token_hex(32),
+)
+SESSION_COOKIE_NAME: str = "mdm_session"
+SESSION_MAX_AGE: int = 86400  # 24 hours
+
+# ---------------------------------------------------------------------------
+# Tunnel / reverse-proxy shareable URL
+# ---------------------------------------------------------------------------
+TUNNEL_URL: str = os.environ.get("TUNNEL_URL", "")
+
+# ---------------------------------------------------------------------------
+# CORS
+# ---------------------------------------------------------------------------
+ALLOWED_ORIGINS: list = [
+    o.strip()
+    for o in os.environ.get("ALLOWED_ORIGINS", "").split(",")
+    if o.strip()
+]
+
+# ---------------------------------------------------------------------------
+# Rate limiting
+# ---------------------------------------------------------------------------
+RATE_LIMIT_REQUESTS: int = int(os.environ.get("RATE_LIMIT_REQUESTS", "120"))
+RATE_LIMIT_WINDOW: int = int(os.environ.get("RATE_LIMIT_WINDOW", "60"))  # seconds
+
+# ---------------------------------------------------------------------------
+# Production mode
+# ---------------------------------------------------------------------------
+PRODUCTION: bool = os.environ.get("PRODUCTION", "0").strip() in ("1", "true", "yes")
+
 
 # ---------------------------------------------------------------------------
 # Download defaults

@@ -5,6 +5,8 @@ __pycache__/
 
 # Output directory for downloads
 /output/
+downloads/
+uploads/
 # If they used a custom path, they shouldn't commit their downloads anyway, but we'll ignore mp4/jpg in root just in case
 *.mp4
 *.mkv
@@ -26,6 +28,12 @@ ENV/
 .env
 .env.local
 
+# Production logs
+app.log
+
 # IDEs
 .vscode/
 .idea/
+
+# Backup files
+*.bak

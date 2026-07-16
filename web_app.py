@@ -7,19 +7,23 @@ job state, browser fallback, search providers, and job-config persistence.
 """
 
 import csv
+import hashlib
+import hmac
 import html
 import json
+import logging
 import mimetypes
 import os
 import re
+import socket
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 import urllib.parse
 import webbrowser
 import zipfile
-import time
 from email.parser import BytesParser
 from email.policy import default as email_policy
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -57,7 +61,10 @@ from universal_link_downloader import (
 # Centralized configuration (defaults + optional config.json overrides).
 from app_config import (
     APP_VERSION,
+    ALLOWED_ORIGINS,
     AUTH_PROFILE,
+    AUTH_PASSWORD,
+    AUTH_USERNAME,
     BROWSER_CLICK_TIMEOUT_MS,
     BROWSER_CONTROL_TIMEOUT_MS,
     BROWSER_DOWNLOAD_TIMEOUT_MS,
@@ -83,26 +90,105 @@ from app_config import (
     MAX_REPORT_ROWS,
     MAX_THUMB_SIZE,
     PORT_FALLBACK_LIMIT,
+    PRODUCTION,
     PROVIDER_LIMITS,
+    RATE_LIMIT_REQUESTS,
+    RATE_LIMIT_WINDOW,
     SAVED_CONFIGS_DIR,
+    SESSION_COOKIE_NAME,
+    SESSION_MAX_AGE,
+    SESSION_SECRET,
     TEMPLATES_DIR,
     THUMB_EXTENSIONS,
+    TUNNEL_URL,
     UPLOAD_DIR,
 )
 
-# On cloud servers (Render etc.), use environment PORT and bind to all interfaces
-_env_port = os.environ.get("PORT")
-if _env_port:
-    HOST = "0.0.0.0"
-    PORT = int(_env_port)
+# HOST/PORT: env vars take priority (already resolved in app_config).
+HOST = EFFECTIVE_HOST
+PORT = EFFECTIVE_PORT
+
+# ---------------------------------------------------------------------------
+# Logging setup
+# ---------------------------------------------------------------------------
+if PRODUCTION:
+    logging.basicConfig(
+        filename=str(APP_DIR / "app.log"),
+        level=logging.INFO,
+        format='{"time":"%(asctime)s","level":"%(levelname)s","msg":"%(message)s"}',
+        datefmt="%Y-%m-%dT%H:%M:%S",
+    )
 else:
-    HOST = EFFECTIVE_HOST
-    PORT = EFFECTIVE_PORT
+    logging.basicConfig(level=logging.WARNING)
+
+logger = logging.getLogger("mdm")
 
 # Ensure runtime directories exist.
 DEFAULT_OUTPUT.mkdir(parents=True, exist_ok=True)
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 SAVED_CONFIGS_DIR.mkdir(parents=True, exist_ok=True)
+
+# ---------------------------------------------------------------------------
+# Auth helpers
+# ---------------------------------------------------------------------------
+AUTH_ENABLED = bool(AUTH_USERNAME and AUTH_PASSWORD)
+
+def _make_session_token(username: str) -> str:
+    """Create an HMAC-signed session token."""
+    payload = f"{username}:{int(time.time()) // SESSION_MAX_AGE}"
+    sig = hmac.new(SESSION_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return f"{payload}:{sig}"
+
+def _validate_session_token(token: str) -> bool:
+    """Verify an HMAC-signed session token is valid and not expired."""
+    try:
+        parts = token.rsplit(":", 1)
+        if len(parts) != 2:
+            return False
+        payload, sig = parts
+        expected = hmac.new(SESSION_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig, expected):
+            return False
+        # Check time window
+        _username, ts_bucket = payload.rsplit(":", 1)
+        current_bucket = int(time.time()) // SESSION_MAX_AGE
+        return int(ts_bucket) >= current_bucket - 1  # allow 1 bucket overlap
+    except Exception:
+        return False
+
+def _get_session_cookie(handler) -> str:
+    """Extract the session cookie value from request headers."""
+    cookie_header = handler.headers.get("Cookie", "")
+    for part in cookie_header.split(";"):
+        part = part.strip()
+        if part.startswith(f"{SESSION_COOKIE_NAME}="):
+            return part[len(SESSION_COOKIE_NAME) + 1:]
+    return ""
+
+def _is_authenticated(handler) -> bool:
+    """Return True if auth is disabled or the session token is valid."""
+    if not AUTH_ENABLED:
+        return True
+    token = _get_session_cookie(handler)
+    return bool(token) and _validate_session_token(token)
+
+# ---------------------------------------------------------------------------
+# Rate limiting (token bucket per IP)
+# ---------------------------------------------------------------------------
+_rate_buckets: dict = {}
+_rate_lock = threading.Lock()
+
+def _check_rate_limit(ip: str) -> bool:
+    """Return True if request is allowed, False if rate limited."""
+    now = time.time()
+    with _rate_lock:
+        bucket = _rate_buckets.get(ip)
+        if bucket is None or now - bucket["window_start"] >= RATE_LIMIT_WINDOW:
+            _rate_buckets[ip] = {"window_start": now, "count": 1}
+            return True
+        bucket["count"] += 1
+        return bucket["count"] <= RATE_LIMIT_REQUESTS
+
 
 
 # ---------------------------------------------------------------------------
@@ -229,9 +315,65 @@ STATE = JobState()
 # ---------------------------------------------------------------------------
 # Helpers: HTML template, desktop notifications, file pickers
 # ---------------------------------------------------------------------------
-def _load_login_html() -> str:
-    path = Path(__file__).parent / "templates" / "login.html"
-    return path.read_text(encoding="utf-8") if path.exists() else "<h1>login.html missing</h1>"
+def _load_login_html(error: str = "") -> str:
+    """Generate a clean built-in login page (no Supabase dependency)."""
+    err_html = f'<p class="error">{html.escape(error)}</p>' if error else ""
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Media Download Manager — Login</title>
+<style>
+  *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+    font-family: 'Segoe UI', system-ui, sans-serif; color: #fff;
+  }}
+  .card {{
+    background: rgba(255,255,255,0.07); backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.15); border-radius: 20px;
+    padding: 48px 40px; width: 100%; max-width: 400px;
+    box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+  }}
+  .logo {{ font-size: 2rem; font-weight: 700; margin-bottom: 8px; }}
+  .logo span {{ color: #a78bfa; }}
+  .subtitle {{ color: rgba(255,255,255,0.55); font-size: 0.9rem; margin-bottom: 32px; }}
+  label {{ display: block; font-size: 0.8rem; font-weight: 600; letter-spacing: .05em;
+    color: rgba(255,255,255,0.7); margin-bottom: 6px; }}
+  input {{
+    width: 100%; padding: 12px 16px; background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.2); border-radius: 10px;
+    color: #fff; font-size: 1rem; outline: none; margin-bottom: 20px;
+    transition: border-color .2s;
+  }}
+  input:focus {{ border-color: #a78bfa; }}
+  button {{
+    width: 100%; padding: 13px; background: linear-gradient(135deg, #7c3aed, #a78bfa);
+    border: none; border-radius: 10px; color: #fff; font-size: 1rem;
+    font-weight: 600; cursor: pointer; transition: opacity .2s;
+  }}
+  button:hover {{ opacity: 0.88; }}
+  .error {{ color: #f87171; font-size: 0.88rem; margin-bottom: 16px;
+    background: rgba(248,113,113,0.1); border-radius: 8px; padding: 10px 14px; }}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">Media <span>DL</span></div>
+  <div class="subtitle">Sign in to access the Download Manager</div>
+  {err_html}
+  <form method="POST" action="/auth/login">
+    <label for="username">Username</label>
+    <input id="username" name="username" type="text" autocomplete="username" required autofocus>
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Sign In</button>
+  </form>
+</div>
+</body>
+</html>"""
 
 def _load_html() -> str:
     """Load the frontend from templates/index.html (kept out of this module)."""
@@ -1274,21 +1416,85 @@ def delete_job_config(name: str) -> None:
 # HTTP handler
 # ---------------------------------------------------------------------------
 class Handler(BaseHTTPRequestHandler):
+
+    # ------------------------------------------------------------------
+    # Common helpers
+    # ------------------------------------------------------------------
+    def _client_ip(self) -> str:
+        return self.client_address[0]
+
+    def _add_security_headers(self):
+        """Add secure HTTP headers to every response."""
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "SAMEORIGIN")
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src 'self' data: blob:; "
+            "connect-src 'self';"
+        )
+
+    def _add_cors_headers(self):
+        """Add CORS headers for allowed origins."""
+        origin = self.headers.get("Origin", "")
+        if ALLOWED_ORIGINS and origin in ALLOWED_ORIGINS:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+        elif not ALLOWED_ORIGINS:
+            # No restriction configured — allow same-origin only (browser handles it)
+            pass
+
+    def _redirect(self, location: str, status: int = 302):
+        self.send_response(status)
+        self.send_header("Location", location)
+        self._add_security_headers()
+        self.end_headers()
+
+    def _require_auth(self) -> bool:
+        """Return True if request is authenticated. Otherwise redirect and return False."""
+        if _is_authenticated(self):
+            return True
+        if self.path.startswith("/api/"):
+            self.send_json({"error": "Unauthorized"}, status=401)
+        else:
+            self._redirect("/login")
+        return False
+
+    # ------------------------------------------------------------------
+    # GET
+    # ------------------------------------------------------------------
     def do_GET(self):
         path = urllib.parse.urlsplit(self.path).path
+
+        # Rate limiting
+        if not _check_rate_limit(self._client_ip()):
+            self.send_response(429)
+            self.send_header("Retry-After", str(RATE_LIMIT_WINDOW))
+            self._add_security_headers()
+            self.end_headers()
+            return
+
         try:
             if path == "/login":
                 self.send_html(_load_login_html())
                 return
-            elif path == "/":
-                # Check for Supabase cookie
-                cookie_header = self.headers.get('Cookie', '')
-                if 'sb-access-token=' not in cookie_header:
-                    self.send_response(302)
-                    self.send_header('Location', '/login')
-                    self.end_headers()
-                    return
-                
+            if path == "/auth/logout":
+                self.send_response(302)
+                self.send_header("Location", "/login")
+                self.send_header(
+                    "Set-Cookie",
+                    f"{SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"
+                )
+                self._add_security_headers()
+                self.end_headers()
+                return
+            if not self._require_auth():
+                return
+            if path == "/":
                 page = _load_html().replace("__DEFAULT_OUTPUT__", str(DEFAULT_OUTPUT))
                 page = page.replace("__DEFAULT_WORKERS__", str(EFFECTIVE_WORKERS))
                 page = page.replace("__DEFAULT_TIMEOUT__", str(DEFAULT_TIMEOUT))
@@ -1306,17 +1512,32 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.send_error(404)
         except Exception as exc:
+            logger.exception("GET error: %s", exc)
             self.send_error(500, str(exc))
 
+    # ------------------------------------------------------------------
+    # POST
+    # ------------------------------------------------------------------
     def do_POST(self):
         path = urllib.parse.urlsplit(self.path).path
-        
-        # Simple auth check for API
-        cookie_header = self.headers.get('Cookie', '')
-        if 'sb-access-token=' not in cookie_header:
-            self.send_error(401, "Unauthorized")
+
+        # Rate limiting
+        if not _check_rate_limit(self._client_ip()):
+            self.send_response(429)
+            self.send_header("Retry-After", str(RATE_LIMIT_WINDOW))
+            self._add_security_headers()
+            self.end_headers()
             return
-            
+
+        # Auth login endpoint — no session required
+        if path == "/auth/login":
+            self._handle_login()
+            return
+
+        # All other POST endpoints require authentication
+        if not self._require_auth():
+            return
+
         try:
             payload = self.read_json()
             if path == "/api/start":
@@ -1356,10 +1577,50 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.send_json({"error": "API endpoint not found."}, status=404)
         except Exception as exc:
+            logger.exception("POST error: %s", exc)
             self.send_json({"error": str(exc)}, status=400)
 
+    def do_OPTIONS(self):
+        """Handle CORS preflight."""
+        self.send_response(204)
+        self._add_cors_headers()
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self._add_security_headers()
+        self.end_headers()
+
+    # ------------------------------------------------------------------
+    # Auth login handler
+    # ------------------------------------------------------------------
+    def _handle_login(self):
+        if not AUTH_ENABLED:
+            self._redirect("/")
+            return
+        length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(length).decode("utf-8", errors="replace") if length else ""
+        params = urllib.parse.parse_qs(body)
+        username = params.get("username", [""])[0].strip()
+        password = params.get("password", [""])[0]
+        if username == AUTH_USERNAME and password == AUTH_PASSWORD:
+            token = _make_session_token(username)
+            self.send_response(302)
+            self.send_header("Location", "/")
+            self.send_header(
+                "Set-Cookie",
+                f"{SESSION_COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_MAX_AGE}"
+            )
+            self._add_security_headers()
+            self.end_headers()
+        else:
+            self.send_html(_load_login_html(error="Invalid username or password."))
+
+    # ------------------------------------------------------------------
+    # Response helpers
+    # ------------------------------------------------------------------
     def read_json(self):
         length = int(self.headers.get("Content-Length", "0"))
+        if length > 2 * 1024 * 1024:  # 2 MB max payload
+            raise ValueError("Request body too large.")
         raw = self.rfile.read(length).decode("utf-8-sig") if length else "{}"
         return json.loads(raw or "{}")
 
@@ -1368,22 +1629,24 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))
+        self._add_security_headers()
+        self._add_cors_headers()
         self.end_headers()
         self.wfile.write(raw)
 
-    def send_html(self, text):
+    def send_html(self, text, status=200):
         raw = text.encode("utf-8")
-        self.send_response(200)
+        self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))
+        self._add_security_headers()
         self.end_headers()
         self.wfile.write(raw)
 
     def serve_thumbnail(self, path):
         """Serve a thumbnail SAFELY.
 
-        - Path must resolve under one of the allowed roots (output dir or its
-          parents) to block traversal attacks (``../../``).
+        - Path must resolve under the output directory to block traversal.
         - Only image extensions are served.
         - Files above MAX_THUMB_SIZE are rejected.
         - Streamed in chunks to avoid loading large files into memory.
@@ -1420,6 +1683,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(resolved.stat().st_size))
+        self._add_security_headers()
         self.end_headers()
         with resolved.open("rb") as handle:
             while True:
@@ -1429,7 +1693,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(chunk)
 
     def log_message(self, fmt, *args):
-        return
+        if PRODUCTION:
+            logger.info(fmt % args)
 
 
 def create_server():
@@ -1450,13 +1715,44 @@ def create_server():
         raise
 
 
+def _get_lan_ip() -> str:
+    """Best-effort local LAN IP detection."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return ""
+
+
 def main():
     server, port = create_server()
-    url = f"http://{HOST}:{port}/"
-    print(f"Media Download Manager v{APP_VERSION} web UI: {url}")
-    # Don't try to open a browser on headless cloud servers
-    if not os.environ.get("PORT"):
-        webbrowser.open(url)
+    local_url = f"http://127.0.0.1:{port}/"
+    lan_ip = _get_lan_ip()
+    lan_url = f"http://{lan_ip}:{port}/" if lan_ip and lan_ip != "127.0.0.1" else ""
+
+    print(f"\n{'='*55}")
+    print(f"  Media Download Manager  v{APP_VERSION}")
+    print(f"{'='*55}")
+    print(f"  Local:   {local_url}")
+    if lan_url:
+        print(f"  LAN:     {lan_url}")
+    if TUNNEL_URL:
+        print(f"  Tunnel:  {TUNNEL_URL}")
+    if AUTH_ENABLED:
+        print(f"  Auth:    ON  (username: {AUTH_USERNAME})")
+    else:
+        print(f"  Auth:    OFF (open access)")
+    print(f"{'='*55}\n")
+
+    logger.info("Server started on %s:%s", HOST, port)
+
+    # Auto-open browser (skip on headless/Docker)
+    if not os.environ.get("NO_BROWSER"):
+        webbrowser.open(local_url)
+
     server.serve_forever()
 
 

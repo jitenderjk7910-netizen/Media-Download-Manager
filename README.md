@@ -1,78 +1,189 @@
-# Media Download Manager
+﻿# Media Download Manager
 
-Single GUI tool for mixed brand links: direct image URLs, public image folders, Dropbox, Google Drive, SharePoint, OneDrive, ImgBB, and generic HTTP links.
+A production-ready, secure web-based tool for batch downloading images from direct URLs, Dropbox, Google Drive, SharePoint, OneDrive, ImgBB, and generic web pages.
+
+## Features
+
+- **Batch Download** from Excel/CSV files
+- **Manual Mode** — paste links directly
+- **Search & Download** — search product images by style codes
+- **Secure by default** — optional username/password login, secure HTTP headers, rate limiting
+- **LAN sharing** — colleagues connect via browser, no installation needed
+- **Docker ready** — one command to deploy
+- **Tunnel support** — share securely via Cloudflare Tunnel, Tailscale Funnel, or ngrok
+
+---
+
+## Quick Start (Local)
+
+### 1. Install requirements
+```bat
+pip install -r requirements.txt
+```
+
+### 2. Run (no authentication)
+```bat
+python web_app.py
+```
+The app opens automatically at `http://localhost:8080/` and also displays your LAN address.
+
+### 3. Run (with authentication)
+Set environment variables before running:
+```powershell
+$env:USERNAME="admin"; $env:PASSWORD="yourpassword"; python web_app.py
+```
+
+Or create a `.env` file (copy from `.env.example`):
+```
+USERNAME=admin
+PASSWORD=yourpassword
+```
+Then load it:
+```powershell
+Get-Content .env | ForEach-Object { if ($_ -match "^([^#][^=]+)=(.*)$") { [System.Environment]::SetEnvironmentVariable($Matches[1], $Matches[2]) } }
+python web_app.py
+```
+
+---
+
+## Running with Docker
+
+### 1. Copy and configure environment
+```bash
+cp .env.example .env
+# Edit .env with your USERNAME, PASSWORD, etc.
+```
+
+### 2. Build and start
+```bash
+docker-compose up -d
+```
+
+### 3. Open in browser
+```
+http://localhost:8080/
+```
+
+### Stop
+```bash
+docker-compose down
+```
+
+Downloaded files persist in `./downloads/` (mounted as a volume).
+
+---
+
+## Sharing over LAN (Office Wi-Fi)
+
+When you run `python web_app.py`, the startup banner displays your LAN address automatically:
+
+```
+=======================================================
+  Media Download Manager  v2.0
+=======================================================
+  Local:   http://127.0.0.1:8080/
+  LAN:     http://192.168.1.65:8080/
+  Auth:    OFF (open access)
+=======================================================
+```
+
+Your colleagues on the **same Wi-Fi network** can open `http://192.168.1.65:8080/` in their browser and use the tool. They never see your source code or filesystem.
+
+> **Tip:** Keep the terminal window open while they use it. Closing it stops the server.
+
+---
+
+## Sharing Securely over the Internet
+
+### Option A: Cloudflare Tunnel (Recommended — Free)
+
+1. Install: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+2. Run your app normally: `python web_app.py`
+3. In another terminal:
+   ```bash
+   cloudflared tunnel --url http://localhost:8080
+   ```
+4. Copy the `trycloudflare.com` URL shown and set it in `.env`:
+   ```
+   TUNNEL_URL=https://your-tunnel.trycloudflare.com
+   ```
+5. Restart the app — the tunnel URL will show in the startup banner and users can access it from anywhere.
+
+> Always enable `USERNAME` and `PASSWORD` when sharing over the internet!
+
+### Option B: Tailscale Funnel
+
+1. Install Tailscale: https://tailscale.com/download
+2. Enable Funnel:
+   ```bash
+   tailscale funnel 8080
+   ```
+3. Your app is now accessible at `https://yourdevice.tailXXXXX.ts.net/`
+4. Set `TUNNEL_URL=https://yourdevice.tailXXXXX.ts.net/` in `.env`
+
+### Option C: ngrok
+
+1. Install ngrok: https://ngrok.com/download
+2. Run your app: `python web_app.py`
+3. In another terminal:
+   ```bash
+   ngrok http 8080
+   ```
+4. Copy the `https://xxxxx.ngrok-free.app` URL shown.
+
+---
+
+## Configuration Reference
+
+All settings can be configured via environment variables or a `.env` file.
+
+| Variable | Default | Description |
+|---|---|---|
+| `HOST` | `0.0.0.0` | Server bind address |
+| `PORT` | `8080` | Server port |
+| `USERNAME` | *(blank)* | Login username (leave blank for open access) |
+| `PASSWORD` | *(blank)* | Login password |
+| `SESSION_SECRET` | *(auto)* | Cookie signing secret (set for production) |
+| `TUNNEL_URL` | *(blank)* | Public URL to display on startup |
+| `ALLOWED_ORIGINS` | *(blank)* | Comma-separated CORS origins |
+| `RATE_LIMIT_REQUESTS` | `120` | Max requests per IP per window |
+| `RATE_LIMIT_WINDOW` | `60` | Rate limit window in seconds |
+| `PRODUCTION` | `0` | Set `1` to enable JSON logging to `app.log` |
+| `NO_BROWSER` | `0` | Set `1` to skip auto-opening browser |
+
+---
 
 ## Input Format
 
-Paste rows or load Excel/CSV.
-
 ```text
-BarcodeOrFolder    Link1    Link2    Link3
-ABC001             https://...jpg    https://drive.google.com/...
-ABC002             https://dropbox.com/...    https://ibb.co/...
+BarcodeOrFolder    Link1                          Link2
+ABC001             https://example.com/image.jpg  https://drive.google.com/...
+ABC002             https://dropbox.com/...         https://ibb.co/...
 ```
 
-The first non-link column becomes the output folder name. Every URL in the row is downloaded into that folder.
+The first non-link column becomes the output folder name.
 
-## Working
+---
 
-- Direct image/file link: downloads the file.
-- Zip/folder download: extracts the zip into the folder.
-- Dropbox: converts public shared folder links to direct zip download, then extracts them.
-- Google Drive: uses `gdown` for folders where possible, and direct Google download fallback for `open?id=...` files.
-- SharePoint/OneDrive: reuses the existing SharePoint downloader core in this workspace.
-- ImgBB/generic image pages: opens the page HTML and downloads image links found in `og:image`, `src`, or `href`.
-- Every run creates `download_report.xlsx` in the output folder.
+## Security Model
 
-## Limitations
+| Feature | Detail |
+|---|---|
+| Authentication | HMAC-signed session cookie (24h), optional via env vars |
+| Secure Headers | X-Frame-Options, X-Content-Type-Options, CSP, Referrer-Policy |
+| Rate Limiting | 120 requests/min per IP (configurable) |
+| CORS | Same-origin by default; opt-in via `ALLOWED_ORIGINS` |
+| File Access | Downloads sandboxed to `downloads/` folder |
+| Directory Traversal | Blocked — thumbnails locked to output directory |
+| Docker | Runs as non-root `mdm` user |
 
-No public downloader can bypass private permissions. If Google Drive, SharePoint, OneDrive, Dropbox, or any website requires login/access approval, the tool will fail or report a login/HTML page. For such cases, make the link public/downloadable, or use a browser-session fallback for that platform.
+---
 
-Dropbox note: folder links like `https://www.dropbox.com/scl/fo/...&dl=0` are supported. The tool switches them to `dl=1` and uses a downloader-style request so Dropbox returns a zip instead of the web page.
+## Supported Sources
 
-## Recommended Run
-
-Use the browser dashboard:
-
-```bat
-run_web_ui.bat
-```
-
-It opens `http://127.0.0.1:8080/` and uses the same downloader backend.
-Running `python universal_link_downloader.py` also opens the modern web dashboard.
-
-Modes:
-
-- Excel / CSV Batch: select a file and preview detected links before downloading.
-- Manual Link Test: test one folder name with one or more links.
-- Search & Download: paste Koton style codes/search terms; the app searches product images and downloads them by style folder.
-
-Main controls:
-
-- Preview Queue: checks link count, folder count, and platform split.
-- Pause / Resume / Stop: controls the active queue.
-- Retry Failed Only: reads `download_report.xlsx` and retries failed links only.
-- Skip Existing: skips folders that already contain downloaded files.
-- File Mode: choose all files, images + videos, or images only.
-- Folder Naming: choose folder-only, row+folder, or platform+folder naming.
-- Result Filters: filter table by all, OK, failed, skipped, or search text.
-- Failure Groups: groups failures by login/access, timeout, not found, page/not direct, no media, and other.
-- Browser Fallback: after direct/public download fails, tries a logged-in Chrome/Edge browser download button pass.
-- Output Audit: shows how many expected folders contain files and which are empty/missing.
-- Preview Thumbnails: shows the first image found in each completed folder.
-- Resume From Report: skips links already marked OK in `download_report.xlsx`.
-- Image Quality: choose best available image or all discovered sizes for search modes.
-- Auto Fixes: keeps platform link normalization enabled by default.
-- Create Template: creates a starter Excel template in the output folder.
-- Open Output / Open Report: opens the save folder or `download_report.xlsx`.
-
-## Classic Tkinter Run
-
-1. Double-click `install_requirements.bat` once.
-2. Double-click `run_gui.bat`, or run `python universal_link_downloader.py --classic-gui`.
-
-CLI:
-
-```bat
-python universal_link_downloader.py --cli links.xlsx downloads
-```
+- Direct image/file URLs (`.jpg`, `.png`, `.webp`, `.gif`, `.mp4`, `.zip`, etc.)
+- Dropbox shared folder links
+- Google Drive files and folders (via `gdown`)
+- SharePoint / OneDrive shared links
+- ImgBB and generic image pages
+- Browser fallback (Playwright) for sites requiring login
