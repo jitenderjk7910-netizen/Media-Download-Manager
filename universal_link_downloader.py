@@ -354,17 +354,25 @@ class UniversalDownloader:
         self._speed_window_start = 0.0
         self._speed_window_bytes = 0
 
+    def enqueue_task(self, task):
+        if hasattr(self, "task_queue"):
+            self.task_queue.put(task)
+            self.total_tasks += 1
+
     def run(self, tasks, progress=None, stop_event=None, pause_event=None):
         self.stop_event = stop_event
         self.pause_event = pause_event
         self.output_dir.mkdir(parents=True, exist_ok=True)
         results = []
-        total = len(tasks)
+        self.total_tasks = len(tasks)
         done = 0
+
+        self.task_queue = queue.Queue()
+        for t in tasks:
+            self.task_queue.put(t)
 
         try:
             with ThreadPoolExecutor(max_workers=self.workers) as executor:
-                pending_tasks = iter(tasks)
                 futures = {}
 
                 def submit_next():
@@ -375,8 +383,8 @@ class UniversalDownloader:
                             return False
                         time.sleep(PAUSE_POLL_INTERVAL)
                     try:
-                        task_item = next(pending_tasks)
-                    except StopIteration:
+                        task_item = self.task_queue.get_nowait()
+                    except queue.Empty:
                         return False
                     futures[executor.submit(self.download_task, task_item)] = task_item
                     return True
@@ -397,7 +405,7 @@ class UniversalDownloader:
                         results.append((task, result))
                         self.append_report(task, result)
                         if progress:
-                            progress(done, total, task, result)
+                            progress(done, self.total_tasks, task, result)
                         if stop_event is None or not stop_event.is_set():
                             submit_next()
 
@@ -412,7 +420,7 @@ class UniversalDownloader:
                 except Exception:
                     pass
 
-        self.log(f"Finished {done} of {total} items")
+        self.log(f"Finished {done} of {self.total_tasks} items")
         if self.stop_event and self.stop_event.is_set():
             # Already shut down executor, just logging
             pass

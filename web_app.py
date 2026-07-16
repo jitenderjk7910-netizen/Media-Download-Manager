@@ -223,6 +223,7 @@ class JobState:
         self.stop_event = threading.Event()
         self.pause_event = threading.Event()
         self.notify_enabled = EFFECTIVE_NOTIFICATIONS
+        self.downloader = None
 
     def snapshot(self):
         with self.lock:
@@ -1321,13 +1322,17 @@ def run_download(tasks, output, workers, timeout, stop_event, pause_event, paylo
             transfer_progress=transfer_progress,
             task_events=STATE.task_event,
             proxy=payload.get("proxy"),
-            speed_limit_kbps=int(payload.get("speedLimitKbps") or 0),
+            speed_limit_kbps=int(payload.get("speedLimitKbps") or 0)
         )
         if payload.get("sourceMode") == "retry" or payload.get("resumeFromReport"):
             report_path = Path(output) / LOG_NAME
             existing_rows = rows_from_file(report_path)
             if existing_rows and len(existing_rows) > 1:
                 downloader.report_rows = list(existing_rows[1:])
+        
+        with STATE.lock:
+            STATE.downloader = downloader
+
         downloader.run(tasks, progress=progress, stop_event=stop_event, pause_event=pause_event)
         if failed_for_browser and not stop_event.is_set():
             STATE.log(f"Browser fallback pass: {len(failed_for_browser)} failed link(s)")
@@ -1345,6 +1350,7 @@ def run_download(tasks, output, workers, timeout, stop_event, pause_event, paylo
             STATE.log(f"Browser fallback finished. Previous failed count before fallback: {before_failed}")
         with STATE.lock:
             STATE.running = False
+            STATE.downloader = None
             STATE.status = "Stopped" if stop_event.is_set() else f"Done: {STATE.ok} ok, {STATE.skipped} skipped, {STATE.failed} failed"
             cleanup_output_metadata(output)
             STATE.audit = output_audit(output, tasks)
@@ -1571,7 +1577,24 @@ class Handler(BaseHTTPRequestHandler):
             payload = self.read_json()
             if path == "/api/start":
                 start_job(payload)
-                self.send_json({"ok": True})
+                self.send_json({"status": "started"})
+            elif path == "/api/enqueue":
+                if not STATE.running or not STATE.downloader:
+                    # Fallback: start a new job if nothing is running
+                    payload["sourceMode"] = "manual"
+                    start_job(payload)
+                    self.send_json({"status": "started"})
+                else:
+                    new_tasks = tasks_from_payload(payload, resolve_search=True, log=STATE.log)
+                    if new_tasks:
+                        for t in new_tasks:
+                            STATE.downloader.enqueue_task(t)
+                        with STATE.lock:
+                            STATE.total += len(new_tasks)
+                            for t in new_tasks:
+                                STATE.providers[provider_name(t.url)] = STATE.providers.get(provider_name(t.url), 0) + 1
+                        STATE.log(f"Enqueued {len(new_tasks)} new link(s).")
+                    self.send_json({"status": "enqueued", "added": len(new_tasks)})
             elif path == "/api/preview":
                 self.send_json(preview_from_payload(payload))
             elif path == "/api/stop":
